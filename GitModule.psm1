@@ -278,8 +278,25 @@ Function Invoke-MergePullRequest
 
 Function Create-GitCommandAlias
 {
-    ##Place holder for future updates.
-    Write-Host "This is a work in progress."
+    [cmdletbinding()]
+    Param(
+    [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$false)]
+    [string]$AliasCommand,
+    [Parameter(Mandatory=$true,Position=1,ValueFromPipeline=$false)]
+    [string]$OriginalCommand
+    )
+    Begin
+    {
+        $AliasCommandOutput = @()
+    }
+    Process
+    {
+        $AliasCommandOutput = git config --global alias.$AliasCommand $OriginalCommand 2>&1
+    }
+    End
+    {
+        $AliasCommandOutput -split '\n' | Out-Host
+    }
 }
 
 
@@ -298,8 +315,9 @@ Function Push-ChangesToRemotes
     )
     Begin
     {
-        if(Test-path -Path $Folder)
+        if($Folder -and (Test-path -Path $Folder))
         {
+            Set-Location -Path $Folder
             if(Get-ChildItem -Path $Folder -Recurse)
             {
                 Write-Host "Please specify a folder that is empty."
