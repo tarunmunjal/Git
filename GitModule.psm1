@@ -318,7 +318,7 @@ Function Push-ChangesToRemotes
     {
         foreach($RemoteAlias in $RemoteAliases)
         {
-            $GitPushOutPut += git push "$RemoteAlias $SourceBranch" 2>&1
+            $GitPushOutPut += git push $RemoteAlias $SourceBranch 2>&1
         }   
     }
     End
