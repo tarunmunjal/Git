@@ -65,7 +65,6 @@ Function Add-RemoteUrls
         }
     }
 }
-
 Function Invoke-CloneSingleBranch
 {
     [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true)]
@@ -417,4 +416,37 @@ Function Show-GitStaleBranches
     {
         $GitRemoteShowOutPut -split '\n' | Out-Host
     }
+}
+
+Function New-GitHubRepo
+{
+    [cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$false,Position=0,ValueFromPipeline=$false)]
+        [string]$RepoName,
+        [Parameter(Mandatory=$false,Position=1,ValueFromPipeline=$false)]
+        [string]$UserName,
+        [Parameter(Mandatory=$false,Position=2,ValueFromPipeline=$false)]
+        [System.Management.Automation.CredentialAttribute()]$Credentials
+    )
+    $CreateHeaders = @{}
+    if(-not $token)
+    {
+        if(-not $Credentials -or (-not $Global:Credentials))
+        {
+            $Credentials = Get-Credential
+        }
+        $EncodedCredntials = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes("$($Credentials.UserName):$($Credentials.GetNetworkCredential().Password)")) 
+        $CreateHeaders.add('Authorization',"Basic $EncodedCredntials")
+    }
+    $CreateHeaders.Add('Content-Type','Application/Json')
+    if(!$url)
+    {
+        $CreateRepoUrl = "https://api.github.com/user/repos"
+    }
+    $RepoParameter = @{}
+    $RepoParameter.add('name',$RepoName)
+    $RepoParameterJson = $RepoParameter | ConvertTo-Json
+    $CreateRepoReponse = Invoke-RestMethod -Method Post -Uri $CreateRepoUrl -Headers $CreateHeaders -Body $RepoParameterJson
+    return $CreateRepoReponse
 }
