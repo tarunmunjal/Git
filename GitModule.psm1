@@ -450,3 +450,41 @@ Function New-GitHubRepo
     $CreateRepoReponse = Invoke-RestMethod -Method Post -Uri $CreateRepoUrl -Headers $CreateHeaders -Body $RepoParameterJson
     return $CreateRepoReponse
 }
+
+Function Disable-GitPush
+{
+   [cmdletbinding()]
+    Param(
+    [Parameter(Mandatory=$false,Position=0,ValueFromPipeline=$false)]
+    [array]$RemoteAliases,
+    [Parameter(Mandatory=$true,Position=1,ValueFromPipeline=$false)]
+    [string]$SourceBranch,
+    [string]$Folder
+    )
+    Begin
+    {
+        if($Folder -and (Test-path -Path $Folder))
+        {
+            Set-Location -Path $Folder
+        }
+        $GitCommandOutput = @()
+        if(-not $RemoteAliases)
+        {
+            $RepoAliasesFromGit = git remote -v 2>&1
+            $RepoAliasesFromGit | % {
+                $RemoteAliases += ($_ -split '\t' | select -First 1)
+            }
+        }
+    }
+    Process
+    {
+        foreach($RemoteAlias in $RemoteAliases)
+        {
+            $GitCommandOutput += git remote set-url --push $RemoteAlias no_push 2>&1
+        }   
+    }
+    End
+    {
+        $GitCommandOutput -split '\n' | Out-Host
+    }
+}
