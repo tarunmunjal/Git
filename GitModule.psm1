@@ -303,40 +303,121 @@ Function Push-ChangesToRemotes
 {
    [cmdletbinding()]
     Param(
-    [Parameter(Mandatory=$false,Position=0,ValueFromPipeline=$false)]
-    [array]$RemoteAliases,
-    [Parameter(Mandatory=$true,Position=1,ValueFromPipeline=$false)]
-    [string]$SourceBranch,
-    [Parameter(Mandatory=$false,Position=2,ValueFromPipeline=$false,
-    HelpMessage='Git repo folder. If not specified the current location will be assumed as the git repo.'
+    [Parameter(Mandatory=$false,
+    Position=0,
+    ValueFromPipeline=$false,
+    HelpMessage='Git repo folder. If not specified it will be taken from $env:dbmsconfigpath.'
     )]
-    [string]$Folder
+    [string]$Folder,
+    [Parameter(Mandatory=$false,
+    Position=1,
+    ValueFromPipeline=$false,
+    HelpMessage='Files to push to git. If not specified all untracked and changed files will be pushed.'
+    )]
+    [array]$FilesToPush = @(),
+    [Parameter(Mandatory=$false,
+    Position=1,
+    ValueFromPipeline=$false,
+    HelpMessage='Message for this commit. If not specified all filenames will be added to the commit message.'
+    )]
+    [array]$CommitMessage = @()
     )
     Begin
     {
-        if($Folder -and (Test-path -Path $Folder))
+        if(!$Folder)
         {
-            Set-Location -Path $Folder
-            if(Get-ChildItem -Path $Folder -Recurse)
-            {
-                Write-Host "Please specify a folder that is empty."
-            }
+            $Folder = $pwd
         }
-        $GitPushOutPut = @()
-        if(-not $RemoteAliases)
+        $ParentFolder = $Folder
+        While($ParentFolder)
         {
-            $RepoAliasesFromGit = git remote -v 2>&1
-            $RepoAliasesFromGit | % {
-                $RemoteAliases += ($_ -split '\t' | select -First 1)
+            Write-Verbose "Checking for git folder in  : $ParentFolder"
+            $GITFOlder = Gci -Path $ParentFolder -Force -ErrorAction Stop | ?{$_.name -eq '.git'} | Select -expandproperty fullname | Split-Path -Parent 
+            Write-Verbose "Git folder : $GITFOlder"
+            if($GITFOlder)
+            {
+                Write-Verbose $GITFOlder
+                break
             }
+            $ParentFolder = Split-Path $ParentFolder -Parent
+        }
+        Set-Location $GITFOlder -ErrorAction Stop
+        $GitPushOutPut = @()
+        $gitfetch = git fetch 2>&1
+        $gitfetch | Out-Host
+        $gitstatus = git status procelian
+        if(-not $SourceBranch)
+        {
+            $SourceBranch = ($gitstatus | ?{$_ -match "^On Branch"}).trimstart('On branch ')
+        }
+        #Pull before doing anything
+        if($gitstatus -notmatch 'up-to-date')
+        {
+            $gitstatus | Out-Host
+            Write-Verbose "Doing a git pull to update the branch."
+            $gitpulloutput = git pull 2>&1
+        }
+        else
+        {
+            Write-Verbose "Git stautus is clean"
+        }
+        if($gitpulloutput -match "Conflict" )
+        {
+            Throw "Unable to pull changes."
+        }
+        else
+        {
+            Write-Verbose "No Conflicts"
         }
     }
     Process
     {
-        foreach($RemoteAlias in $RemoteAliases)
+        if(-not $FilesToPush)
         {
-            $GitPushOutPut += git push $RemoteAlias $SourceBranch 2>&1
-        }   
+            ##CheckUntracked
+            $FilesToPush += git ls-files --others --exclude-standard
+            $FilesToPush += git diff --name-only
+            $FilesToPush = $FilesToPush | ?{-not [string]::IsNullOrEmpty($_)} | select -Unique
+            ##CheckChanged
+            #$FilesToPush.count
+            foreach($FileToPush in $FilesToPush)
+            {
+                    $Filetocommit = $FileToPush.trim()
+                    Write-Verbose "File Name : $Filetocommit"
+                    $GitAddOutput = git add $Filetocommit 2>&1
+            }
+            if(-not $CommitMessage)
+            {
+                $CommitMessage = "Added $($FilesToPush)"
+            }
+            $gitcommitoutput = Git commit -m "$CommitMessage"
+            $gitpushoutput = git push 2>&1
+        }
+        else
+        {
+            $GitStatusOfFile = git diff --name-only
+            Write-Verbose "$GitStatusOfFile"
+            foreach($FileToPush in $FilesToPush)
+            {
+                $Filetocommit = $GitStatusOfFile | ?{$_ -match "$Filetopush" }
+                if($Filetocommit)
+                {
+                    Write-Verbose "File Name : $Filetocommit"
+                    $Filetocommit = $Filetocommit.trim()
+                    $GitAddOutput = git add $Filetocommit
+                }
+                else
+                {
+                    Write-Verbose "File to commit variable is empty."
+                }
+            }
+            if(-not $CommitMessage)
+            {
+                $CommitMessage = "Added $($FilesToPush)"
+            }
+            $gitcommitoutput = Git commit -m "$CommitMessage"
+            $gitpushoutput = git push 2>&1
+        }
     }
     End
     {
